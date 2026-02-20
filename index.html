@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon 报表提取工具 (V20 智能缓存版)</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-blue {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .btn-pulse { animation: pulse-blue 2s infinite; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .delete-btn { transition: all 0.2s; }
+        .delete-btn:hover { background-color: #fee2e2; color: #ef4444; transform: scale(1.1); }
+        .rate-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
+        .currency-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.2rem center;
+            background-repeat: no-repeat;
+            background-size: 1em 1em;
+            padding-right: 1.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans p-6">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6 flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="bg-white p-2 rounded-lg shadow-sm border border-gray-200 mr-3">
+                    <span class="text-3xl">📊</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Amazon 报表提取工具 <span class="text-sm bg-teal-600 text-white px-2 py-1 rounded ml-2">V20 缓存版</span></h1>
+                    <p class="text-gray-500 mt-1">自动记忆上次获取的汇率，无需每日重复点击。</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="bg-white p-5 rounded-xl shadow border border-gray-200 mb-6">
+            <div class="flex justify-between items-center mb-5 border-b pb-3">
+                <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center">
+                    <div class="bg-blue-100 p-1.5 rounded-md mr-2 text-blue-600">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    实时汇率配置
+                </h3>
+                
+                <button id="fetch-rates-btn" class="group relative flex items-center space-x-2 px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full shadow-md hover:shadow-lg hover:from-blue-500 hover:to-indigo-500 transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <svg class="w-4 h-4 transition-transform duration-500 group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>联网刷新汇率</span>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4" id="rates-container">
+                </div>
+            <p id="rate-update-time" class="text-[10px] text-gray-400 mt-2 text-right italic hidden flex items-center justify-end">
+                <span id="cache-dot" class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                <span id="update-source-text">汇率更新于:</span> <span id="update-timestamp" class="ml-1 font-medium text-gray-600"></span>
+            </p>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow border border-gray-200 mb-6">
+            <div id="drop-zone" class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition-all duration-300 relative min-h-[160px] flex flex-col justify-center items-center group">
+                <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
+                <div id="ui-empty-state" class="flex flex-col items-center pointer-events-none transition-opacity duration-300">
+                    <div class="bg-blue-50 p-3 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                        <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    </div>
+                    <p class="text-lg font-medium text-gray-700">点击上传 或 拖拽 PDF 文件</p>
+                    <p class="text-xs text-gray-400 mt-1">支持全站点: US, CA, UK, DE, FR, IT, ES, SE, TR, PL, JP, AU 等</p>
+                </div>
+                <div id="ui-loaded-state" class="hidden w-full max-w-2xl">
+                    <div class="flex items-center justify-center space-x-2 mb-3 text-green-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span class="font-bold text-lg">已加载 <span id="ui-file-count">0</span> 个文件</span>
+                    </div>
+                    <div class="bg-gray-50 rounded border border-gray-200 p-2 max-h-56 overflow-y-auto custom-scrollbar text-left">
+                        <ul id="ui-file-list" class="space-y-1 text-sm text-gray-600"></ul>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2 hover:text-blue-500 transition-colors">点击空白处可继续添加更多文件</p>
+                </div>
+            </div>
+            <div class="flex justify-between items-center mt-6">
+                <button id="clear-btn" class="px-5 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">全部清空</button>
+                <button id="process-btn" class="px-8 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-lg shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-95" disabled>开始提取数据</button>
+            </div>
+        </div>
+
+        <div id="result-section" class="hidden transition-opacity duration-500 opacity-0">
+            <div class="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div class="p-5 border-b border-gray-200 flex flex-wrap justify-between items-center bg-gray-50 gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-800">提取报告</h2>
+                        <p class="text-xs text-gray-500 mt-1">如货币识别错误，可点击表格中的货币按钮手动修改</p>
+                    </div>
+                    <div class="flex items-center space-x-6">
+                        <div class="text-right"><div class="text-xs text-gray-400 font-medium">总收入 (CNY)</div><div id="total-income" class="text-lg font-bold text-green-600">¥0.00</div></div>
+                        <div class="text-right"><div class="text-xs text-gray-400 font-medium">总支出 (CNY)</div><div id="total-expense" class="text-lg font-bold text-red-500">¥0.00</div></div>
+                        <div class="h-8 w-px bg-gray-300"></div>
+                        <div class="text-right"><div class="text-xs text-gray-500 font-bold">总净收入 (CNY)</div><div id="total-net" class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-blue-600">¥0.00</div></div>
+                        <button id="export-btn" class="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 transition shadow ml-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span>导出 Excel</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b">
+                            <tr>
+                                <th class="px-4 py-3">文件名</th>
+                                <th class="px-4 py-3">货币 (点击可改)</th>
+                                <th class="px-4 py-3 text-right">Income</th>
+                                <th class="px-4 py-3 text-right">Expense</th>
+                                <th class="px-4 py-3 text-center">当前汇率</th>
+                                <th class="px-4 py-3 text-right">净收入 (CNY)</th>
+                                <th class="px-4 py-3 text-center">源数据</th>
+                            </tr>
+                        </thead>
+                        <tbody id="result-table-body" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="debug-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-3/4 h-3/4 flex flex-col p-6 relative">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">📄 PDF 原始文本内容</h3>
+                <button onclick="document.getElementById('debug-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <textarea id="debug-text" class="flex-1 w-full p-4 border rounded-lg font-mono text-xs bg-gray-50 resize-none focus:ring-2 focus:ring-blue-500 outline-none" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 1. 配置与状态 ====================
+        const STORAGE_KEY = 'amazon_tool_rates_v1';
+        const DEFAULT_RATES = {
+            'USD': 6.94, 'EUR': 8.31, 'GBP': 9.40, 'CAD': 5.13, 
+            'SEK': 0.75, 'TRY': 0.16, 'PLN': 1.80, 'MXN': 0.35, 
+            'AUD': 4.50, 'JPY': 0.046
+        };
+        let currentRates = { ...DEFAULT_RATES };
+        let processedData = []; 
+        let selectedFiles = []; 
+
+        // ==================== 2. 汇率功能 (V20 缓存逻辑) ====================
+        
+        // 1. 尝试从本地存储加载汇率
+        function loadRatesFromStorage() {
+            const cached = localStorage.getItem(STORAGE_KEY);
+            if (cached) {
+                try {
+                    const { rates, timestamp } = JSON.parse(cached);
+                    // 检查是否在 24 小时内
+                    if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+                        currentRates = rates;
+                        updateTimeDisplay(timestamp, true); // true 表示来自缓存
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Cache load error", e);
+                }
+            }
+            // 没缓存或过期，保持默认
+        }
+
+        // 2. 更新时间戳 UI
+        function updateTimeDisplay(timestamp, isCached) {
+            const timeEl = document.getElementById('rate-update-time');
+            const dotEl = document.getElementById('cache-dot');
+            const textEl = document.getElementById('update-source-text');
+            const timeValEl = document.getElementById('update-timestamp');
+
+            timeEl.classList.remove('hidden');
+            timeValEl.innerText = new Date(timestamp).toLocaleString();
+
+            if (isCached) {
+                textEl.innerText = "已加载上次缓存汇率:";
+                dotEl.className = "w-2 h-2 bg-yellow-500 rounded-full mr-1"; // 黄色表示缓存
+            } else {
+                textEl.innerText = "实时汇率更新于:";
+                dotEl.className = "w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"; // 绿色表示刚刚获取
+            }
+        }
+
+        // 3. 初始化 UI (带数据回填)
+        function initRatesUI() {
+            loadRatesFromStorage(); // 先加载缓存
+
+            const container = document.getElementById('rates-container');
+            container.innerHTML = '';
+            Object.keys(DEFAULT_RATES).forEach(curr => {
+                const div = document.createElement('div');
+                div.className = "flex flex-col p-3 rounded-lg border border-gray-200 bg-gray-50 hover:bg-white hover:shadow-md transition-all duration-200";
+                div.innerHTML = `
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold shadow-sm mr-2 border border-blue-200">${curr}</div>
+                            <span class="text-xs font-semibold text-gray-500">1 ${curr} =</span>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <input type="number" step="0.001" value="${currentRates[curr]}" id="input-${curr}"
+                            class="rate-input w-full text-sm font-bold text-gray-800 bg-white border border-gray-300 rounded-md px-3 py-1.5 shadow-sm transition-all" 
+                            oninput="updateRate('${curr}', this.value)">
+                        <span class="absolute right-6 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 font-medium pointer-events-none bg-white pl-1">CNY</span>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+        initRatesUI();
+
+        window.updateRate = (currency, value) => {
+            const val = parseFloat(value);
+            if (!isNaN(val)) {
+                currentRates[currency] = val;
+                // 手动修改也保存到缓存
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({ rates: currentRates, timestamp: Date.now() }));
+                if (processedData.length > 0) recalculateAllData();
+            }
+        };
+
+        // 联网获取汇率逻辑 (带保存)
+        document.getElementById('fetch-rates-btn').onclick = async () => {
+            const btn = document.getElementById('fetch-rates-btn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 获取中...`;
+            btn.classList.add('cursor-not-allowed', 'opacity-80');
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('https://open.er-api.com/v6/latest/CNY');
+                const data = await response.json();
+
+                if (data && data.rates) {
+                    Object.keys(currentRates).forEach(curr => {
+                        if (data.rates[curr]) {
+                            const newRate = 1 / data.rates[curr];
+                            currentRates[curr] = parseFloat(newRate.toFixed(4));
+                            const input = document.getElementById(`input-${curr}`);
+                            if (input) input.value = currentRates[curr];
+                        }
+                    });
+                    
+                    const now = Date.now();
+                    updateTimeDisplay(now, false);
+                    
+                    // 保存到本地存储
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                        rates: currentRates,
+                        timestamp: now
+                    }));
+
+                    if (processedData.length > 0) recalculateAllData();
+                    setTimeout(() => { alert('汇率更新成功！并已设为默认。'); }, 100);
+                }
+            } catch (error) {
+                console.error("Fetch rates failed:", error);
+                alert('获取汇率失败，请检查网络。');
+            } finally {
+                btn.innerHTML = originalContent;
+                btn.classList.remove('cursor-not-allowed', 'opacity-80');
+                btn.disabled = false;
+            }
+        };
+
+        // ==================== 3. 货币手动修正 ====================
+        window.changeCurrency = (index, newCurrency) => {
+            processedData[index].currency = newCurrency;
+            recalculateAllData();
+        };
+
+        // ==================== 4. 文件处理逻辑 ====================
+        const fileInput = document.getElementById('file-input');
+        const dropZone = document.getElementById('drop-zone');
+        const processBtn = document.getElementById('process-btn');
+        const uiEmpty = document.getElementById('ui-empty-state');
+        const uiLoaded = document.getElementById('ui-loaded-state');
+        const uiList = document.getElementById('ui-file-list');
+        const uiCount = document.getElementById('ui-file-count');
+
+        dropZone.addEventListener('click', (e) => { if (e.target.closest('.delete-btn')) return; fileInput.click(); });
+        fileInput.addEventListener('change', (e) => handleFileSelection(e.target.files));
+        ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.add('border-blue-500', 'bg-blue-50'); }));
+        ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.remove('border-blue-500', 'bg-blue-50'); }));
+        dropZone.addEventListener('drop', (e) => handleFileSelection(e.dataTransfer.files));
+
+        function handleFileSelection(files) {
+            const newFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            if (newFiles.length === 0) return;
+            selectedFiles = [...selectedFiles, ...newFiles];
+            updateDropZoneUI();
+        }
+
+        window.removeFile = (index) => { selectedFiles.splice(index, 1); updateDropZoneUI(); };
+
+        function updateDropZoneUI() {
+            if (selectedFiles.length > 0) {
+                uiEmpty.classList.add('hidden'); uiLoaded.classList.remove('hidden'); dropZone.classList.add('border-green-400', 'bg-green-50');
+                uiCount.textContent = selectedFiles.length;
+                uiList.innerHTML = selectedFiles.map((f, index) => `
+                    <li class="flex items-center text-xs bg-white p-2 rounded shadow-sm border border-gray-100 group hover:border-blue-200 transition-colors">
+                        <svg class="w-4 h-4 text-red-500 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"></path></svg>
+                        <span class="truncate flex-1 font-medium text-gray-700">${f.name}</span>
+                        <span class="text-gray-400 text-[10px] ml-2 mr-3 whitespace-nowrap">${(f.size/1024).toFixed(0)} KB</span>
+                        <button onclick="removeFile(${index}); event.stopPropagation();" class="delete-btn flex items-center justify-center w-6 h-6 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-500 transition-colors" title="移除"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                    </li>`).join('');
+                processBtn.disabled = false; processBtn.classList.add('btn-pulse'); processBtn.textContent = `开始提取 (${selectedFiles.length} 个文件)`;
+            } else { resetUI(); }
+        }
+
+        function resetUI() {
+            selectedFiles = []; processedData = []; fileInput.value = '';
+            uiEmpty.classList.remove('hidden'); uiLoaded.classList.add('hidden'); dropZone.classList.remove('border-green-400', 'bg-green-50');
+            processBtn.disabled = true; processBtn.classList.remove('btn-pulse'); processBtn.textContent = '开始提取';
+            document.getElementById('result-section').classList.add('hidden'); document.getElementById('result-section').classList.remove('opacity-100');
+        }
+        document.getElementById('clear-btn').onclick = resetUI;
+
+        document.getElementById('process-btn').onclick = async () => {
+            processBtn.disabled = true; processBtn.classList.remove('btn-pulse');
+            processBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 处理中...';
+            processedData = [];
+            const tasks = selectedFiles.map(async (file) => {
+                const extractor = new PDFExtractor(file);
+                return await extractor.extract();
+            });
+            const results = await Promise.all(tasks);
+            processedData = results.filter(d => d !== null).sort((a, b) => a.filename.localeCompare(b.filename));
+            const resSection = document.getElementById('result-section');
+            resSection.classList.remove('hidden');
+            setTimeout(() => resSection.classList.add('opacity-100'), 50);
+            recalculateAllData();
+            processBtn.disabled = false; processBtn.textContent = '提取完成 (点击再次提取)';
+        };
+
+        // ==================== 5. PDF 解析核心 ====================
+        const KEYWORDS = {
+            income: ['Total Income', 'Income', 'Revenus', 'Einnahmen', 'Ingresos', 'Ricavi', 'Inkomen', 'Intäkter', 'Gelir', 'Przychody', 'Sales', 'Credits'],
+            expense: ['Total Expenses', 'Expenses', 'Dépenses', 'Ausgaben', 'Costes', 'Spese', 'Uitgaven', 'Utgifter', 'Harcamalar', 'Giderler', 'Wydatki', 'Fees', 'Debits']
+        };
+
+        class PDFExtractor {
+            constructor(file) { this.file = file; this.filename = file.name; this.rawTextLines = []; }
+            
+            async extract() {
+                try {
+                    const arrayBuffer = await this.file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    const page = await pdf.getPage(1);
+                    const textContent = await page.getTextContent();
+                    const items = textContent.items.map(item => ({ str: item.str, y: Math.round(item.transform[5]), x: item.transform[4] }));
+                    items.sort((a, b) => b.y - a.y || a.x - b.x);
+                    let lines = [], currentY = null, currentLine = "";
+                    items.forEach(item => {
+                        if (currentY === null || Math.abs(item.y - currentY) > 6) {
+                            if (currentLine) lines.push(currentLine.trim());
+                            currentLine = item.str; currentY = item.y;
+                        } else { currentLine += " " + item.str; }
+                    });
+                    if (currentLine) lines.push(currentLine.trim());
+                    this.rawTextLines = lines;
+
+                    const income = this.smartSearch(lines, KEYWORDS.income, 'income');
+                    const expense = this.smartSearch(lines, KEYWORDS.expense, 'expense');
+                    
+                    let currency = this.detectCurrency(lines);
+                    if (!currency) currency = this.detectCurrencyByFilename();
+
+                    return { filename: this.filename, currency: currency, income: income || 0, expense: expense || 0, rawLines: lines };
+                } catch (e) { console.error(e); return null; }
+            }
+
+            detectCurrency(lines) {
+                const text = lines.slice(0, 50).join(' ').toUpperCase();
+                if (text.includes('ABD DOLARI')) return 'USD';
+                if (text.includes('TÜRK LIRASI') || text.includes('TURK LIRASI') || text.includes('₺')) return 'TRY';
+                const word = (w) => new RegExp(`\\b${w}\\b`, 'i');
+                if (word('EUR').test(text)) return 'EUR';
+                if (word('GBP').test(text)) return 'GBP';
+                if (word('USD').test(text)) return 'USD';
+                if (word('CAD').test(text)) return 'CAD';
+                if (word('TRY').test(text) || word('TL').test(text)) return 'TRY';
+                if (word('SEK').test(text)) return 'SEK';
+                if (word('PLN').test(text) || text.includes('ZŁ')) return 'PLN';
+                if (word('AUD').test(text)) return 'AUD';
+                if (word('JPY').test(text) || text.includes('¥')) return 'JPY';
+                if (word('MXN').test(text)) return 'MXN';
+                const isTurkish = text.includes('ÖZETLER') || text.includes('TOPLAMLAR');
+                if ((word('KR').test(text) || /\bKR\./.test(text)) && !isTurkish) return 'SEK';
+                if (text.includes('€')) return 'EUR';
+                if (text.includes('£')) return 'GBP';
+                if (text.includes('$')) return 'USD';
+                return null;
+            }
+
+            detectCurrencyByFilename() {
+                const f = this.filename.toUpperCase();
+                if (f.startsWith('DE') || f.startsWith('FR') || f.startsWith('IT') || f.startsWith('ES') || f.startsWith('NL') || f.startsWith('BE')) return 'EUR';
+                if (f.startsWith('UK') || f.startsWith('GB')) return 'GBP';
+                if (f.startsWith('CA')) return 'CAD';
+                if (f.startsWith('SE')) return 'SEK';
+                if (f.startsWith('TR')) return 'TRY';
+                if (f.startsWith('PL')) return 'PLN';
+                if (f.startsWith('JP')) return 'JPY';
+                if (f.startsWith('AU')) return 'AUD';
+                if (f.startsWith('MX')) return 'MXN';
+                return 'USD';
+            }
+
+            smartSearch(lines, keywords, type) {
+                for (const kw of keywords) {
+                    for (const line of lines) {
+                        if (line.toLowerCase().includes(kw.toLowerCase())) {
+                            const nums = this.extractNumbers(line);
+                            if (nums.length > 0) {
+                                let best = null;
+                                if (type === 'income') {
+                                    const pos = nums.filter(n => n > 0);
+                                    best = pos.length > 0 ? Math.max(...pos) : nums.reduce((p, c) => Math.abs(c) > Math.abs(p) ? c : p);
+                                } else {
+                                    const neg = nums.filter(n => n < 0);
+                                    best = neg.length > 0 ? neg.reduce((p, c) => c < p ? c : p) : nums.reduce((p, c) => Math.abs(c) > Math.abs(p) ? c : p);
+                                }
+                                if (best !== null && Math.abs(best) > 0.01) return best;
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            extractNumbers(line) {
+                const regex = /[\u2212−-]?\s*(?:\d{1,3}(?:[\s.,]\d{3})+|\d+)(?:[.,]\d{2})?/g;
+                const matches = line.match(regex);
+                return matches ? matches.map(this.parseNumber).filter(n => n !== null) : [];
+            }
+
+            parseNumber(numStr) {
+                if (!numStr) return null;
+                let s = numStr.trim().replace(/\u2212/g, '-').replace(/−/g, '-').replace(/\u00A0/g, '').replace(/\s/g, ''); 
+                s = s.replace(/[^\d.,-]/g, ''); 
+                let sign = 1;
+                if (s.startsWith('-') || s.endsWith('-')) { sign = -1; s = s.replace(/-/g, ''); }
+                if (!s) return null;
+                const lastDot = s.lastIndexOf('.');
+                const lastComma = s.lastIndexOf(',');
+                if (lastComma > lastDot) { s = s.replace(/\./g, '').replace(',', '.'); } 
+                else { s = s.replace(/,/g, ''); }
+                let val = parseFloat(s);
+                return isNaN(val) ? null : val * sign;
+            }
+        }
+
+        // ==================== 6. 数据渲染 ====================
+        function recalculateAllData() {
+            const tbody = document.getElementById('result-table-body');
+            tbody.innerHTML = '';
+            let totalNet = 0, totalIncome = 0, totalExpense = 0;
+
+            processedData.forEach((data, index) => {
+                const rate = currentRates[data.currency] || 1.0;
+                const incomeCny = (data.income || 0) * rate;
+                const expenseCny = Math.abs(data.expense || 0) * rate; 
+                const netCny = incomeCny - expenseCny;
+                
+                totalIncome += incomeCny;
+                totalExpense += expenseCny;
+                totalNet += netCny;
+                renderRow(data, rate, netCny, tbody, index);
+            });
+
+            document.getElementById('total-income').innerText = `¥${totalIncome.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+            document.getElementById('total-expense').innerText = `-¥${totalExpense.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+            document.getElementById('total-net').innerText = `¥${totalNet.toLocaleString('zh-CN', {minimumFractionDigits: 2})}`;
+        }
+
+        function renderRow(data, rate, netCny, tbody, index) {
+            const tr = document.createElement('tr');
+            tr.className = "bg-white border-b hover:bg-gray-50 transition-colors";
+            
+            const currencies = Object.keys(DEFAULT_RATES);
+            const options = currencies.map(c => `<option value="${c}" ${c === data.currency ? 'selected' : ''}>${c}</option>`).join('');
+            
+            let badgeClass = 'bg-gray-100 text-gray-800';
+            if (data.currency === 'USD') badgeClass = 'bg-green-100 text-green-800 border-green-200';
+            else if (data.currency === 'EUR') badgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+            else if (data.currency === 'JPY') badgeClass = 'bg-pink-100 text-pink-800 border-pink-200';
+            else if (data.currency === 'GBP') badgeClass = 'bg-purple-100 text-purple-800 border-purple-200';
+
+            tr.innerHTML = `
+                <td class="px-4 py-3 font-medium text-gray-900 truncate max-w-xs" title="${data.filename}">${data.filename}</td>
+                <td class="px-4 py-3">
+                    <select onchange="changeCurrency(${index}, this.value)" class="currency-select text-xs font-bold px-2 py-1 rounded border ${badgeClass} cursor-pointer focus:ring-2 focus:ring-blue-300 outline-none">
+                        ${options}
+                    </select>
+                </td>
+                <td class="px-4 py-3 text-right font-mono ${data.income === 0 ? 'text-gray-300' : 'text-green-600'}">${data.income.toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                <td class="px-4 py-3 text-right font-mono ${data.expense === 0 ? 'text-gray-300' : 'text-red-600'}">${data.expense.toLocaleString('de-DE', {minimumFractionDigits: 2})}</td>
+                <td class="px-4 py-3 text-center text-xs text-gray-500 font-mono bg-gray-50 mx-2 rounded">${rate.toFixed(3)}</td>
+                <td class="px-4 py-3 text-right font-bold font-mono text-base ${netCny >= 0 ? 'text-green-700' : 'text-red-700'}">¥${netCny.toLocaleString('zh-CN', {minimumFractionDigits: 2})}</td>
+                <td class="px-4 py-3 text-center"><button onclick="showDebug(${index})" class="text-xs text-blue-500 hover:underline">查看</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        window.showDebug = (index) => {
+            const lines = processedData[index].rawLines;
+            document.getElementById('debug-text').value = lines.join('\n');
+            document.getElementById('debug-modal').classList.remove('hidden');
+        };
+
+        document.getElementById('export-btn').onclick = () => {
+            if (!processedData.length) return;
+            const csv = ["文件名,货币,Income,Expense,汇率,净收入(CNY)"];
+            let sumIncomeCNY = 0, sumExpenseCNY = 0, sumNetCNY = 0;
+            processedData.forEach(d => {
+                const rate = currentRates[d.currency] || 1.0;
+                const net = ((d.income || 0) - Math.abs(d.expense || 0)) * rate;
+                sumIncomeCNY += (d.income || 0) * rate;
+                sumExpenseCNY += Math.abs(d.expense || 0) * rate * -1;
+                sumNetCNY += net;
+                csv.push(`"${d.filename}","${d.currency}",${d.income},${d.expense},${rate},${net.toFixed(2)}`);
+            });
+            csv.push(`"汇总 (折合CNY)","-",${sumIncomeCNY.toFixed(2)},${sumExpenseCNY.toFixed(2)},"-",${sumNetCNY.toFixed(2)}`);
+            const blob = new Blob(["\uFEFF" + csv.join("\n")], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "Amazon财务报表_V20.csv";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+    </script>
+</body>
+</html>
