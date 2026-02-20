@@ -1,4 +1,4 @@
-# Amazon-Sale-Summary-Extractor
+# Amazon-Sale-Summary-Extractor -- Created by Gemini
 Extract sales and expenses from amazon summary pdf files
 # Amazon Financial Report Extractor 📊
 
