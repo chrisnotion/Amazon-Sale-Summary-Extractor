@@ -25,6 +25,12 @@ It intelligently handles various global formatting quirks (like European decimal
 
 Since this is a pure frontend application, no Node.js, Python, or database backend is required.
 
+
+Hosting js file on a CDN(recommended)
+just download the html file and open it on your broswer.
+
+
+self-host js files
 1. **Clone or Download** this repository.
 2. Ensure you have the required files in the same directory:
    - `index.html`
@@ -34,6 +40,7 @@ Since this is a pure frontend application, no Node.js, Python, or database backe
 3. **Open `index.html`** in any modern web browser (Chrome, Edge, Safari, Firefox).
 4. **Drag and drop** your Amazon PDF reports into the designated area.
 5. Click **"Extract Data"** and export your CSV!
+
 
 ## 🛠️ Tech Stack
 
@@ -64,6 +71,10 @@ Since this is a pure frontend application, no Node.js, Python, or database backe
 ## 🚀 快速使用
 
 本工具为纯前端项目，无需安装 Node.js、Python 环境或任何数据库。
+
+使用CDN托管js文件（推荐）
+1 下载cdn version文件夹中的html文件到本地或者部署到你自己的服务器。
+2.使用浏览器打开
 
 1. **下载或克隆** 本仓库到您的电脑。
 2. 确保以下文件在同一个文件夹内：
